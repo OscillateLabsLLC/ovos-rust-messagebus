@@ -9,6 +9,10 @@ edition = "2021"
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.15"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# serde_json = "1.0"
+simd-json = "0.5"
 EventEmitter = "0.0.4"
 futures-util = "0.3"
+
+[profile.release]
+strip = true
