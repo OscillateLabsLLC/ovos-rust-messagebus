@@ -95,7 +95,7 @@ impl MessageBus {
 #[tokio::main]
 async fn main() {
     let config = Config {
-        host: "127.0.0.1".to_string(),
+        host: "0.0.0.0".to_string(),
         port: 8181,
     };
 
