@@ -6,6 +6,7 @@ LABEL org.opencontainers.image.description="Message bus service, the nervous sys
 LABEL org.opencontainers.image.documentation="https://github.com/OscillateLabsLLC/ovos-rust-messagebus"
 LABEL org.opencontainers.image.source="https://github.com/OscillateLabsLLC/ovos-rust-messagebus"
 LABEL org.opencontainers.image.vendor="Oscillate Labs, LLC"
+LABEL org.opencontainers.image.license="Apache-2.0"
 
 WORKDIR /usr/src/ovos-rust-messagebus
 
