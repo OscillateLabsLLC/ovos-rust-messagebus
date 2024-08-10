@@ -16,11 +16,28 @@ pub struct MessageBus {
 }
 
 impl MessageBus {
-    pub fn new(config: Config) -> Self {
-        Self {
-            config: Arc::new(config),
-            connections: Arc::new(Mutex::new(Vec::new())),
-            event_emitter: Arc::new(Mutex::new(EventEmitter::new())),
+    pub async fn run(&self) {
+        let addr = format!("{}:{}", self.config.host, self.config.port);
+        let listener = TcpListener::bind(&addr)
+            .await
+            .expect("Failed to bind to address");
+        println!(
+            "MessageBus listening on {} (route: {})",
+            addr, self.config.route
+        );
+
+        while let Ok((stream, _)) = listener.accept().await {
+            let bus_clone = self.clone();
+            tokio::spawn(async move {
+                match accept_async(stream).await {
+                    Ok(ws_stream) => {
+                        bus_clone.handle_connection(ws_stream).await;
+                    }
+                    Err(e) => {
+                        eprintln!("Error during WebSocket handshake: {}", e);
+                    }
+                }
+            });
         }
     }
 
