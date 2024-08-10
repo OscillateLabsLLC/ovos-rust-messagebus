@@ -88,15 +88,15 @@ jobs:
           platforms: ${{ matrix.architecture }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}/${{ env.DOCKER_IMAGE_NAME }}:latest
-            ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+            ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:latest
+            ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}/${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}"
+          image-ref: "ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:${{ github.sha }}"
           format: "table"
           exit-code: "1"
           ignore-unfixed: true
@@ -122,12 +122,12 @@ jobs:
 
       - name: Create and push manifest
         run: |
-          docker manifest create ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}/${{ env.DOCKER_IMAGE_NAME }}:latest \
-            ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}/${{ env.DOCKER_IMAGE_NAME }}:latest-linux-amd64 \
-            ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}/${{ env.DOCKER_IMAGE_NAME }}:latest-linux-arm64 \
-            ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}/${{ env.DOCKER_IMAGE_NAME }}:latest-linux-arm-v7 \
-            ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}/${{ env.DOCKER_IMAGE_NAME }}:latest-linux-arm-v6
-          docker manifest push ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}/${{ env.DOCKER_IMAGE_NAME }}:latest
+          docker manifest create ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:latest \
+            ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:latest-linux-amd64 \
+            ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:latest-linux-arm64 \
+            ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:latest-linux-arm-v7 \
+            ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:latest-linux-arm-v6
+          docker manifest push ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:latest
 
   create-release:
     needs: [build-binaries, build-and-push, create-manifest]
