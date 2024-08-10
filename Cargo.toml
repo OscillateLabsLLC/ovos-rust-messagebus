@@ -1,6 +1,6 @@
 [package]
 name = "ovos_messagebus"
-version = "0.1.0"
+version = "0.3.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -9,6 +9,8 @@ edition = "2021"
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.15"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
 EventEmitter = "0.0.4"
 futures-util = "0.3"
+serde_yaml = "0.9.34"
+jsonc-parser = "0.23.0"
+serde_json = "1.0.122"
