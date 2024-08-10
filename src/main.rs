@@ -2,8 +2,8 @@ mod config;
 mod message_bus;
 mod utils;
 
-use config::Config;
-use message_bus::MessageBus;
+use crate::config::Config;
+use crate::message_bus::MessageBus;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

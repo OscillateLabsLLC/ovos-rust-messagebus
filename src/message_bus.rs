@@ -4,9 +4,9 @@ use tokio::net::TcpListener;
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
-use EventEmitter::EventEmitter;
 
 use crate::config::Config;
+use EventEmitter::EventEmitter;
 
 #[derive(Clone)]
 pub struct MessageBus {
@@ -35,15 +35,8 @@ impl MessageBus {
         while let Ok((stream, _)) = listener.accept().await {
             let bus_clone = self.clone();
             tokio::spawn(async move {
-                match accept_async(stream).await {
-                    Ok(ws_stream) => {
-                        if let Err(e) = bus_clone.handle_connection(ws_stream).await {
-                            eprintln!("Error handling connection: {}", e);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Error during WebSocket handshake: {}", e);
-                    }
+                if let Err(e) = bus_clone.handle_connection(stream).await {
+                    eprintln!("Error handling connection: {}", e);
                 }
             });
         }
@@ -53,9 +46,11 @@ impl MessageBus {
 
     async fn handle_connection(
         &self,
-        ws_stream: tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>,
+        stream: tokio::net::TcpStream,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        let ws_stream = accept_async(stream).await?;
         let (tx, mut rx) = mpsc::unbounded_channel();
+        let tx_clone = tx.clone();
         {
             let mut connections = self.connections.lock().unwrap();
             connections.push(tx);
@@ -64,7 +59,7 @@ impl MessageBus {
         let (mut write, mut read) = ws_stream.split();
 
         let read_bus = self.clone();
-        tokio::spawn(async move {
+        let read_handle = tokio::spawn(async move {
             while let Some(message) = read.next().await {
                 match message {
                     Ok(Message::Text(text)) => {
@@ -73,14 +68,13 @@ impl MessageBus {
                             break;
                         }
                         println!("Received message: {}", text);
-                        let connections = read_bus.connections.lock().unwrap();
-                        for conn in connections.iter() {
-                            if let Err(e) = conn.send(Message::Text(text.clone())) {
-                                eprintln!("Failed to send message: {}", e);
-                            }
-                        }
+                        read_bus.broadcast_message(&text).await;
                         let event_emitter = read_bus.event_emitter.lock().unwrap();
                         event_emitter.emit(&text);
+                    }
+                    Ok(Message::Close(_)) => {
+                        println!("WebSocket connection closed");
+                        break;
                     }
                     Ok(_) => {}
                     Err(e) => {
@@ -89,19 +83,36 @@ impl MessageBus {
                     }
                 }
             }
-            // Handle connection close
-            let mut connections = read_bus.connections.lock().unwrap();
-            connections.retain(|conn| !conn.is_closed());
+            read_bus.remove_connection(&tx_clone).await;
         });
 
-        while let Some(message) = rx.recv().await {
-            write.send(message).await?;
+        let write_handle = tokio::spawn(async move {
+            while let Some(message) = rx.recv().await {
+                if let Err(e) = write.send(message).await {
+                    eprintln!("Error sending message: {}", e);
+                    break;
+                }
+            }
+        });
+
+        tokio::select! {
+            _ = read_handle => {},
+            _ = write_handle => {},
         }
 
-        // Clean up connections after the write loop ends
-        let mut connections = self.connections.lock().unwrap();
-        connections.retain(|conn| !conn.is_closed());
-
         Ok(())
+    }
+
+    async fn broadcast_message(&self, message: &str) {
+        let mut connections = self.connections.lock().unwrap();
+        connections.retain(|tx| match tx.send(Message::Text(message.to_string())) {
+            Ok(_) => true,
+            Err(_) => false,
+        });
+    }
+
+    async fn remove_connection(&self, tx: &UnboundedSender<Message>) {
+        let mut connections = self.connections.lock().unwrap();
+        connections.retain(|conn| !conn.same_channel(tx));
     }
 }
