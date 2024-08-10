@@ -10,7 +10,7 @@ env:
   DOCKER_IMAGE_NAME: ovos-rust-messagebus
   CARGO_TERM_COLOR: always
 
-  permissions:
+permissions:
   contents: read
   packages: write
 

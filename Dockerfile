@@ -1,5 +1,5 @@
 # Build stage
-FROM rust:1.73-slim-bullseye as builder
+FROM rust:1.73-slim-bullseye AS builder
 
 LABEL org.opencontainers.image.title="OpenVoiceOS Rust message bus image"
 LABEL org.opencontainers.image.description="Message bus service, the nervous system of OpenVoiceOS (Rust implementation)"
