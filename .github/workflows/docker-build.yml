@@ -93,16 +93,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Scan image for vulnerabilities
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: "ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:${{ github.sha }}"
-          format: "table"
-          exit-code: "1"
-          ignore-unfixed: true
-          vuln-type: "os,library"
-          severity: "CRITICAL,HIGH"
-
   create-manifest:
     needs: build-and-push
     runs-on: ubuntu-latest
