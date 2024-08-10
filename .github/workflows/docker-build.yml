@@ -10,6 +10,10 @@ env:
   DOCKER_IMAGE_NAME: ovos-rust-messagebus
   CARGO_TERM_COLOR: always
 
+  permissions:
+  contents: read
+  packages: write
+
 jobs:
   build-binaries:
     runs-on: ubuntu-latest
