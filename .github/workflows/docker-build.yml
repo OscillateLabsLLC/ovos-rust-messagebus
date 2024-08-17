@@ -63,7 +63,11 @@ jobs:
           mkdir -p release
           cp target/${{ matrix.target }}/release/ovos_messagebus release/ovos_messagebus-${{ matrix.target }}
           cd release && tar czvf ovos_messagebus-${{ matrix.target }}.tar.gz ovos_messagebus-${{ matrix.target }}
-          sha256sum ovos_messagebus-${{ matrix.target }}.tar.gz > ovos_messagebus-${{ matrix.target }}.tar.gz.sha256
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            shasum -a 256 ovos_messagebus-${{ matrix.target }}.tar.gz > ovos_messagebus-${{ matrix.target }}.tar.gz.sha256
+          else
+            sha256sum ovos_messagebus-${{ matrix.target }}.tar.gz > ovos_messagebus-${{ matrix.target }}.tar.gz.sha256
+          fi
 
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v3
