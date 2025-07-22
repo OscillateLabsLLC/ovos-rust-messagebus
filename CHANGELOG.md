@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v1.1.0...v1.1.1) (2025-07-22)
+
+
+### Bug Fixes
+
+* **docker:** proper multi-platform manifest ([ee794af](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/ee794af9bbf5cabe68040c9c2ff1151b1ffbfd7d))
+
 ## [1.1.0](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v1.0.1...v1.1.0) (2024-12-13)
 
 
