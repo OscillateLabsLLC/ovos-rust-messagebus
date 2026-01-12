@@ -121,6 +121,7 @@ mod tests {
         env::remove_var("OVOS_BUS_HOST");
         env::remove_var("OVOS_BUS_ROUTE");
         env::remove_var("OVOS_BUS_USE_SSL");
+        env::remove_var("OVOS_BUS_MAX_MSG_SIZE");
     }
 
     #[serial]
