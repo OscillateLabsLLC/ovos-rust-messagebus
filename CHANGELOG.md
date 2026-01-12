@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v1.1.1...v1.1.2) (2026-01-12)
+
+
+### Bug Fixes
+
+* update tungsten to resolve high-severity vulnerability ([#21](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/issues/21)) ([ef67a46](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/ef67a46448c48b534719b1756fb7c8c286ed48ee))
+
 ## [1.1.1](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v1.1.0...v1.1.1) (2025-07-22)
 
 
