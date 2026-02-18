@@ -1,5 +1,7 @@
 # OVOS Rust Messagebus
 
+[![Status: Active](https://img.shields.io/badge/status-active-brightgreen)](https://github.com/OscillateLabsLLC/.github/blob/main/SUPPORT_STATUS.md)
+
 This is a Rust implementation of the OpenVoiceOS (OVOS) messagebus, providing a fast and efficient communication backbone for OVOS components. Think of it as the "nervous system" of the OVOS platform.
 
 ## Requirements
@@ -108,7 +110,7 @@ cargo test
 
 ### Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code style, and how to submit pull requests.
 
 ## License
 
