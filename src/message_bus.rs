@@ -1,6 +1,7 @@
 use futures_util::{Sink, SinkExt, StreamExt};
+use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::net::TcpListener;
+use tokio::net::TcpSocket;
 use tokio::sync::broadcast::{self, error::RecvError, error::TryRecvError, Receiver};
 use tokio_tungstenite::accept_async_with_config;
 use tokio_tungstenite::tungstenite::{protocol::WebSocketConfig, Message, Utf8Bytes};
@@ -9,6 +10,7 @@ use tracing::{debug, error, info, trace, warn};
 use crate::config::Config;
 
 const MESSAGE_BUFFER_CAPACITY: usize = 1024;
+const TCP_BACKLOG: u32 = 1024;
 const WRITE_BATCH_SIZE: usize = 64;
 const WRITE_BATCH_BYTES_LIMIT: usize = 256 * 1024;
 
@@ -28,8 +30,15 @@ impl MessageBus {
     }
 
     pub async fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let addr = format!("{}:{}", self.config.host, self.config.port);
-        let listener = TcpListener::bind(&addr).await?;
+        let addr: SocketAddr = format!("{}:{}", self.config.host, self.config.port).parse()?;
+        let socket = if addr.is_ipv6() {
+            TcpSocket::new_v6()?
+        } else {
+            TcpSocket::new_v4()?
+        };
+        socket.set_reuseaddr(true)?;
+        socket.bind(addr)?;
+        let listener = socket.listen(TCP_BACKLOG)?;
         info!(
             "MessageBus listening on {} (route: {})",
             addr, self.config.route
