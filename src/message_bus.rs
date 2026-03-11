@@ -2,18 +2,16 @@ use futures_util::{SinkExt, StreamExt};
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{self, UnboundedSender};
-use tokio_tungstenite::accept_async;
-use tokio_tungstenite::tungstenite::protocol::Message;
-use tracing::{debug, error, info, trace, warn};
+use tokio_tungstenite::accept_async_with_config;
+use tokio_tungstenite::tungstenite::protocol::{Message, WebSocketConfig};
+use tracing::{debug, error, info, trace};
 
 use crate::config::Config;
-use EventEmitter::EventEmitter;
 
 #[derive(Clone)]
 pub struct MessageBus {
     config: Arc<Config>,
     connections: Arc<Mutex<Vec<UnboundedSender<Message>>>>,
-    event_emitter: Arc<Mutex<EventEmitter>>,
 }
 
 impl MessageBus {
@@ -21,7 +19,6 @@ impl MessageBus {
         Self {
             config: Arc::new(config),
             connections: Arc::new(Mutex::new(Vec::new())),
-            event_emitter: Arc::new(Mutex::new(EventEmitter::new())),
         }
     }
 
@@ -49,7 +46,8 @@ impl MessageBus {
         &self,
         stream: tokio::net::TcpStream,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let ws_stream = accept_async(stream).await?;
+        stream.set_nodelay(true)?;
+        let ws_stream = accept_async_with_config(stream, Some(self.websocket_config())).await?;
         let (tx, mut rx) = mpsc::unbounded_channel();
         let tx_clone = tx.clone();
         {
@@ -65,14 +63,8 @@ impl MessageBus {
             while let Some(message) = read.next().await {
                 match message {
                     Ok(Message::Text(text)) => {
-                        if text.len() as u32 > read_bus.config.max_msg_size * 1024 * 1024 {
-                            warn!("Message size exceeds maximum allowed size");
-                            break;
-                        }
                         trace!("Received message: {}", text);
                         read_bus.broadcast_message(&text).await;
-                        let event_emitter = read_bus.event_emitter.lock().unwrap();
-                        event_emitter.emit(&text);
                     }
                     Ok(Message::Close(_)) => {
                         debug!("WebSocket connection closed");
@@ -113,5 +105,13 @@ impl MessageBus {
     async fn remove_connection(&self, tx: &UnboundedSender<Message>) {
         let mut connections = self.connections.lock().unwrap();
         connections.retain(|conn| !conn.same_channel(tx));
+    }
+
+    fn websocket_config(&self) -> WebSocketConfig {
+        let max_message_size = self.config.max_msg_size as usize * 1024 * 1024;
+        let mut config = WebSocketConfig::default();
+        config.max_message_size = Some(max_message_size);
+        config.max_frame_size = Some(max_message_size);
+        config
     }
 }

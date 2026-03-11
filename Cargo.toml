@@ -9,7 +9,6 @@ edition = "2021"
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.24"
 serde = { version = "1.0", features = ["derive"] }
-EventEmitter = "0.0.4"
 futures-util = "0.3"
 serde_yaml = "0.9.34"
 jsonc-parser = "0.23.0"
