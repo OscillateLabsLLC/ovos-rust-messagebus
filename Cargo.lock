@@ -3,12 +3,6 @@
 version = 4
 
 [[package]]
-name = "EventEmitter"
-version = "0.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43375ec7f968f9122d709c807fa6bcc305430f62da0a0973c8d33827c4f7b75b"
-
-[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -293,7 +287,6 @@ checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 name = "ovos_messagebus"
 version = "1.1.2"
 dependencies = [
- "EventEmitter",
  "futures-util",
  "jsonc-parser",
  "serde",
