@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
+use tracing::{error, warn};
 
 use crate::utils::remove_comments;
 
@@ -49,7 +50,7 @@ impl Config {
             if let Ok(contents) = fs::read_to_string(config_file) {
                 config = Self::parse_config(&contents, config);
             } else {
-                eprintln!("Failed to read config file. Using defaults.");
+                warn!("Failed to read config file. Using defaults.");
             }
         }
 
@@ -86,7 +87,7 @@ impl Config {
                 match serde_yaml::from_str::<RootConfig>(&cleaned_contents) {
                     Ok(root_config) => Self::apply_config(root_config, config),
                     Err(e) => {
-                        eprintln!("Failed to parse config file even after removing comments: {}. Using defaults.", e);
+                        error!("Failed to parse config file even after removing comments: {}. Using defaults.", e);
                         config
                     }
                 }
