@@ -71,6 +71,13 @@ impl MessageBus {
             self.message_tx.receiver_count()
         );
 
+        // Send the OVOS "connected" greeting expected by all bus clients
+        let greeting = r#"{"msg_type": "connected", "data": {}, "context": {"session": {"session_id": "default"}}}"#;
+        if let Err(e) = write.send(Message::Text(greeting.into())).await {
+            error!("Failed to send greeting: {}", e);
+            return Ok(());
+        }
+
         let read_bus = self.clone();
         let mut read_handle = tokio::spawn(async move {
             while let Some(message) = read.next().await {
