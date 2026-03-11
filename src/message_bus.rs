@@ -4,12 +4,11 @@ use std::sync::Arc;
 use tokio::net::TcpSocket;
 use tokio::sync::broadcast::{self, error::RecvError, error::TryRecvError, Receiver};
 use tokio_tungstenite::accept_async_with_config;
-use tokio_tungstenite::tungstenite::{protocol::WebSocketConfig, Message, Utf8Bytes};
+use tokio_tungstenite::tungstenite::{error::CapacityError, protocol::WebSocketConfig, Error as WsError, Message, Utf8Bytes};
 use tracing::{debug, error, info, trace, warn};
 
 use crate::config::Config;
 
-const MESSAGE_BUFFER_CAPACITY: usize = 1024;
 const TCP_BACKLOG: u32 = 1024;
 const WRITE_BATCH_SIZE: usize = 64;
 const WRITE_BATCH_BYTES_LIMIT: usize = 256 * 1024;
@@ -22,7 +21,7 @@ pub struct MessageBus {
 
 impl MessageBus {
     pub fn new(config: Config) -> Self {
-        let (message_tx, _) = broadcast::channel(MESSAGE_BUFFER_CAPACITY);
+        let (message_tx, _) = broadcast::channel(config.message_buffer_capacity);
         Self {
             config: Arc::new(config),
             message_tx,
@@ -68,7 +67,7 @@ impl MessageBus {
         debug!("WebSocket connection opened (subscribers: {})", self.message_tx.receiver_count());
 
         let read_bus = self.clone();
-        let read_handle = tokio::spawn(async move {
+        let mut read_handle = tokio::spawn(async move {
             while let Some(message) = read.next().await {
                 match message {
                     Ok(Message::Text(text)) => {
@@ -80,6 +79,13 @@ impl MessageBus {
                         break;
                     }
                     Ok(_) => {}
+                    Err(WsError::Capacity(CapacityError::MessageTooLong { size, max_size })) => {
+                        error!(
+                            "Message too large: {} bytes exceeds {} byte limit (max_msg_size: {} MB)",
+                            size, max_size, read_bus.config.max_msg_size
+                        );
+                        break;
+                    }
                     Err(e) => {
                         error!("WebSocket error: {}", e);
                         break;
@@ -88,7 +94,7 @@ impl MessageBus {
             }
         });
 
-        let write_handle = tokio::spawn(async move {
+        let mut write_handle = tokio::spawn(async move {
             loop {
                 match flush_next_batch(
                     &mut write,
@@ -114,18 +120,16 @@ impl MessageBus {
             }
         });
 
-        let mut read_handle = read_handle;
-        let mut write_handle = write_handle;
         tokio::select! {
             _ = &mut read_handle => {
                 write_handle.abort();
+                let _ = write_handle.await;
             },
             _ = &mut write_handle => {
                 read_handle.abort();
+                let _ = read_handle.await;
             },
         }
-        let _ = read_handle.await;
-        let _ = write_handle.await;
 
         Ok(())
     }

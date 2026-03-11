@@ -13,8 +13,14 @@ pub struct Config {
     pub route: String,
     pub ssl: bool,
     pub max_msg_size: u32,
+    #[serde(default = "default_message_buffer")]
+    pub message_buffer_capacity: usize,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_yaml::Value>,
+}
+
+fn default_message_buffer() -> usize {
+    1024
 }
 
 #[derive(Deserialize)]
@@ -29,6 +35,7 @@ struct WebSocketConfig {
     route: Option<String>,
     ssl: Option<bool>,
     max_msg_size: Option<u32>,
+    message_buffer_capacity: Option<usize>,
     #[serde(flatten)]
     extra: HashMap<String, serde_yaml::Value>,
 }
@@ -42,6 +49,7 @@ impl Config {
             route: "/core".to_string(),
             ssl: false,
             max_msg_size: 25,
+            message_buffer_capacity: default_message_buffer(),
             extra: HashMap::new(),
         };
 
@@ -70,6 +78,11 @@ impl Config {
         }
         if let Ok(route) = env::var("OVOS_BUS_ROUTE") {
             config.route = route;
+        }
+        if let Ok(buf_cap) = env::var("OVOS_BUS_MSG_BUFFER_CAPACITY") {
+            if let Ok(cap) = buf_cap.parse() {
+                config.message_buffer_capacity = cap;
+            }
         }
         if env::var("OVOS_BUS_USE_SSL").is_ok() {
             config.ssl = true;
@@ -102,6 +115,7 @@ impl Config {
             config.route = websocket_config.route.unwrap_or(config.route);
             config.ssl = websocket_config.ssl.unwrap_or(config.ssl);
             config.max_msg_size = websocket_config.max_msg_size.unwrap_or(config.max_msg_size);
+            config.message_buffer_capacity = websocket_config.message_buffer_capacity.unwrap_or(config.message_buffer_capacity);
             config.extra = websocket_config.extra;
         }
         config
@@ -123,6 +137,7 @@ mod tests {
         env::remove_var("OVOS_BUS_ROUTE");
         env::remove_var("OVOS_BUS_USE_SSL");
         env::remove_var("OVOS_BUS_MAX_MSG_SIZE");
+        env::remove_var("OVOS_BUS_MSG_BUFFER_CAPACITY");
     }
 
     #[serial]
@@ -134,6 +149,7 @@ mod tests {
         assert_eq!(test_conf.port, 8181);
         assert_eq!(test_conf.route, "/core".to_string());
         assert_eq!(test_conf.max_msg_size, 25);
+        assert_eq!(test_conf.message_buffer_capacity, 1024);
         assert!(!test_conf.ssl);
     }
 
@@ -146,12 +162,14 @@ mod tests {
         env::set_var("OVOS_BUS_MAX_MSG_SIZE", "42");
         env::set_var("OVOS_BUS_ROUTE", "/modermodemet");
         env::set_var("OVOS_BUS_USE_SSL", "true");
+        env::set_var("OVOS_BUS_MSG_BUFFER_CAPACITY", "4096");
 
         let test_conf = Config::new();
         assert_eq!(test_conf.port, 1337);
         assert_eq!(test_conf.host, "battle.net".to_string());
         assert_eq!(test_conf.max_msg_size, 42);
         assert_eq!(test_conf.route, "/modermodemet");
+        assert_eq!(test_conf.message_buffer_capacity, 4096);
         assert!(test_conf.ssl);
     }
 
