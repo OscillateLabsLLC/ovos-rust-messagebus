@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.0.0](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v1.1.2...v2.0.0) (2026-03-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* internals rewritten — mutex+vec fanout replaced with tokio::sync::broadcast, tungstenite upgraded to 0.28, EventEmitter removed, tracing replaces println, TCP backlog and connection handling overhauled. Wire protocol unchanged.
+
+### Features
+
+* broadcast channel refactor, tracing, connection scaling ([d1b0c41](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/d1b0c41d42eb649d7b4001d5e37e764def36e030))
+* configurable buffer capacity, oversize error logging, JoinHandle fix, docs ([84fbff0](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/84fbff07dc0db1e9e8463744e87b9a629598577b))
+* replace println!/eprintln! with tracing ([0545a2e](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/0545a2e1aeb668bb5e1424982fbc9cb9f62ef3e2))
+
+
+### Bug Fixes
+
+* send OVOS "connected" greeting on WebSocket connect ([a783664](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/a783664434b4998f73bc80af7506f41e78eb44c4))
+* use explicit TCP backlog to prevent connection rejections under load ([3fdb754](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/3fdb75487bd3b12413572447c83253302a00ac5b))
+
+
+### Performance Improvements
+
+* batch websocket writes, use Utf8Bytes, upgrade tungstenite 0.28 ([7c838ee](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/7c838eec5786889fed7e444bc1741868b2dd1e3f))
+* remove EventEmitter, add TCP_NODELAY, enforce max_msg_size via websocket config ([14c1a97](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/14c1a97548270502764f591d384066352288da8f))
+* replace mutex+vec fanout with bounded broadcast channel ([380ed17](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/380ed1761d3b414eb0f4b4d28930c6e935e6cc58))
+
 ## [1.1.2](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v1.1.1...v1.1.2) (2026-01-12)
 
 
