@@ -1,24 +1,27 @@
 use futures_util::{SinkExt, StreamExt};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::sync::broadcast;
 use tokio_tungstenite::accept_async_with_config;
 use tokio_tungstenite::tungstenite::protocol::{Message, WebSocketConfig};
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::config::Config;
+
+const MESSAGE_BUFFER_CAPACITY: usize = 1024;
 
 #[derive(Clone)]
 pub struct MessageBus {
     config: Arc<Config>,
-    connections: Arc<Mutex<Vec<UnboundedSender<Message>>>>,
+    message_tx: broadcast::Sender<Message>,
 }
 
 impl MessageBus {
     pub fn new(config: Config) -> Self {
+        let (message_tx, _) = broadcast::channel(MESSAGE_BUFFER_CAPACITY);
         Self {
             config: Arc::new(config),
-            connections: Arc::new(Mutex::new(Vec::new())),
+            message_tx,
         }
     }
 
@@ -48,15 +51,10 @@ impl MessageBus {
     ) -> Result<(), Box<dyn std::error::Error>> {
         stream.set_nodelay(true)?;
         let ws_stream = accept_async_with_config(stream, Some(self.websocket_config())).await?;
-        let (tx, mut rx) = mpsc::unbounded_channel();
-        let tx_clone = tx.clone();
-        {
-            let mut connections = self.connections.lock().unwrap();
-            connections.push(tx);
-        }
-        debug!("WebSocket connection opened (total: {})", self.connections.lock().unwrap().len());
-
         let (mut write, mut read) = ws_stream.split();
+        let mut rx = self.message_tx.subscribe();
+
+        debug!("WebSocket connection opened (subscribers: {})", self.message_tx.receiver_count());
 
         let read_bus = self.clone();
         let read_handle = tokio::spawn(async move {
@@ -64,7 +62,7 @@ impl MessageBus {
                 match message {
                     Ok(Message::Text(text)) => {
                         trace!("Received message: {}", text);
-                        read_bus.broadcast_message(&text).await;
+                        let _ = read_bus.message_tx.send(Message::Text(text));
                     }
                     Ok(Message::Close(_)) => {
                         debug!("WebSocket connection closed");
@@ -77,34 +75,42 @@ impl MessageBus {
                     }
                 }
             }
-            read_bus.remove_connection(&tx_clone).await;
         });
 
         let write_handle = tokio::spawn(async move {
-            while let Some(message) = rx.recv().await {
-                if let Err(e) = write.send(message).await {
-                    error!("Error sending message: {}", e);
-                    break;
+            loop {
+                match rx.recv().await {
+                    Ok(message) => {
+                        if let Err(e) = write.send(message).await {
+                            error!("Error sending message: {}", e);
+                            break;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                        warn!("Slow consumer lagged, dropped {} messages — disconnecting", skipped);
+                        break;
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        break;
+                    }
                 }
             }
         });
 
+        let mut read_handle = read_handle;
+        let mut write_handle = write_handle;
         tokio::select! {
-            _ = read_handle => {},
-            _ = write_handle => {},
+            _ = &mut read_handle => {
+                write_handle.abort();
+            },
+            _ = &mut write_handle => {
+                read_handle.abort();
+            },
         }
+        let _ = read_handle.await;
+        let _ = write_handle.await;
 
         Ok(())
-    }
-
-    async fn broadcast_message(&self, message: &str) {
-        let mut connections = self.connections.lock().unwrap();
-        connections.retain(|tx| tx.send(Message::Text(message.to_string())).is_ok());
-    }
-
-    async fn remove_connection(&self, tx: &UnboundedSender<Message>) {
-        let mut connections = self.connections.lock().unwrap();
-        connections.retain(|conn| !conn.same_channel(tx));
     }
 
     fn websocket_config(&self) -> WebSocketConfig {
