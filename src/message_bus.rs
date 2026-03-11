@@ -1,19 +1,21 @@
-use futures_util::{SinkExt, StreamExt};
+use futures_util::{Sink, SinkExt, StreamExt};
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::broadcast;
+use tokio::sync::broadcast::{self, error::RecvError, error::TryRecvError, Receiver};
 use tokio_tungstenite::accept_async_with_config;
-use tokio_tungstenite::tungstenite::protocol::{Message, WebSocketConfig};
+use tokio_tungstenite::tungstenite::{protocol::WebSocketConfig, Message, Utf8Bytes};
 use tracing::{debug, error, info, trace, warn};
 
 use crate::config::Config;
 
 const MESSAGE_BUFFER_CAPACITY: usize = 1024;
+const WRITE_BATCH_SIZE: usize = 64;
+const WRITE_BATCH_BYTES_LIMIT: usize = 256 * 1024;
 
 #[derive(Clone)]
 pub struct MessageBus {
     config: Arc<Config>,
-    message_tx: broadcast::Sender<Message>,
+    message_tx: broadcast::Sender<Utf8Bytes>,
 }
 
 impl MessageBus {
@@ -62,7 +64,7 @@ impl MessageBus {
                 match message {
                     Ok(Message::Text(text)) => {
                         trace!("Received message: {}", text);
-                        let _ = read_bus.message_tx.send(Message::Text(text));
+                        let _ = read_bus.message_tx.send(text);
                     }
                     Ok(Message::Close(_)) => {
                         debug!("WebSocket connection closed");
@@ -79,18 +81,24 @@ impl MessageBus {
 
         let write_handle = tokio::spawn(async move {
             loop {
-                match rx.recv().await {
-                    Ok(message) => {
-                        if let Err(e) = write.send(message).await {
-                            error!("Error sending message: {}", e);
-                            break;
-                        }
-                    }
-                    Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                match flush_next_batch(
+                    &mut write,
+                    &mut rx,
+                    WRITE_BATCH_SIZE,
+                    WRITE_BATCH_BYTES_LIMIT,
+                )
+                .await
+                {
+                    Ok(BatchState::Continue) => {}
+                    Ok(BatchState::SlowConsumer(skipped)) => {
                         warn!("Slow consumer lagged, dropped {} messages — disconnecting", skipped);
                         break;
                     }
-                    Err(broadcast::error::RecvError::Closed) => {
+                    Ok(BatchState::Closed) => {
+                        break;
+                    }
+                    Err(e) => {
+                        error!("Error sending message: {}", e);
                         break;
                     }
                 }
@@ -115,9 +123,57 @@ impl MessageBus {
 
     fn websocket_config(&self) -> WebSocketConfig {
         let max_message_size = self.config.max_msg_size as usize * 1024 * 1024;
-        let mut config = WebSocketConfig::default();
-        config.max_message_size = Some(max_message_size);
-        config.max_frame_size = Some(max_message_size);
-        config
+        WebSocketConfig::default()
+            .max_message_size(Some(max_message_size))
+            .max_frame_size(Some(max_message_size))
     }
+}
+
+enum BatchState {
+    Continue,
+    SlowConsumer(u64),
+    Closed,
+}
+
+async fn flush_next_batch<S>(
+    write: &mut S,
+    rx: &mut Receiver<Utf8Bytes>,
+    batch_size: usize,
+    batch_bytes_limit: usize,
+) -> Result<BatchState, S::Error>
+where
+    S: Sink<Message> + Unpin,
+{
+    let first = match rx.recv().await {
+        Ok(message) => message,
+        Err(RecvError::Lagged(skipped)) => return Ok(BatchState::SlowConsumer(skipped)),
+        Err(RecvError::Closed) => return Ok(BatchState::Closed),
+    };
+
+    let mut batched_bytes = first.len();
+    write.feed(Message::Text(first)).await?;
+    let mut batched_messages = 1;
+
+    let mut close_state = BatchState::Continue;
+    while batched_messages < batch_size && batched_bytes < batch_bytes_limit {
+        match rx.try_recv() {
+            Ok(message) => {
+                batched_bytes += message.len();
+                write.feed(Message::Text(message)).await?;
+                batched_messages += 1;
+            }
+            Err(TryRecvError::Empty) => break,
+            Err(TryRecvError::Lagged(skipped)) => {
+                close_state = BatchState::SlowConsumer(skipped);
+                break;
+            }
+            Err(TryRecvError::Closed) => {
+                close_state = BatchState::Closed;
+                break;
+            }
+        }
+    }
+
+    write.flush().await?;
+    Ok(close_state)
 }
