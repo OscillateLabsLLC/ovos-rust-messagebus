@@ -14,6 +14,8 @@ futures-util = "0.3"
 serde_yaml = "0.9.34"
 jsonc-parser = "0.23.0"
 serde_json = "1.0.122"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 
 [dev-dependencies]
 serial_test = "3.2.0"

@@ -4,6 +4,7 @@ use tokio::net::TcpListener;
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::protocol::Message;
+use tracing::{debug, error, info, trace, warn};
 
 use crate::config::Config;
 use EventEmitter::EventEmitter;
@@ -27,7 +28,7 @@ impl MessageBus {
     pub async fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
         let addr = format!("{}:{}", self.config.host, self.config.port);
         let listener = TcpListener::bind(&addr).await?;
-        println!(
+        info!(
             "MessageBus listening on {} (route: {})",
             addr, self.config.route
         );
@@ -36,7 +37,7 @@ impl MessageBus {
             let bus_clone = self.clone();
             tokio::spawn(async move {
                 if let Err(e) = bus_clone.handle_connection(stream).await {
-                    eprintln!("Error handling connection: {}", e);
+                    error!("Error handling connection: {}", e);
                 }
             });
         }
@@ -55,6 +56,7 @@ impl MessageBus {
             let mut connections = self.connections.lock().unwrap();
             connections.push(tx);
         }
+        debug!("WebSocket connection opened (total: {})", self.connections.lock().unwrap().len());
 
         let (mut write, mut read) = ws_stream.split();
 
@@ -64,21 +66,21 @@ impl MessageBus {
                 match message {
                     Ok(Message::Text(text)) => {
                         if text.len() as u32 > read_bus.config.max_msg_size * 1024 * 1024 {
-                            eprintln!("Message size exceeds maximum allowed size");
+                            warn!("Message size exceeds maximum allowed size");
                             break;
                         }
-                        println!("Received message: {}", text);
+                        trace!("Received message: {}", text);
                         read_bus.broadcast_message(&text).await;
                         let event_emitter = read_bus.event_emitter.lock().unwrap();
                         event_emitter.emit(&text);
                     }
                     Ok(Message::Close(_)) => {
-                        println!("WebSocket connection closed");
+                        debug!("WebSocket connection closed");
                         break;
                     }
                     Ok(_) => {}
                     Err(e) => {
-                        eprintln!("WebSocket error: {}", e);
+                        error!("WebSocket error: {}", e);
                         break;
                     }
                 }
@@ -89,7 +91,7 @@ impl MessageBus {
         let write_handle = tokio::spawn(async move {
             while let Some(message) = rx.recv().await {
                 if let Err(e) = write.send(message).await {
-                    eprintln!("Error sending message: {}", e);
+                    error!("Error sending message: {}", e);
                     break;
                 }
             }
