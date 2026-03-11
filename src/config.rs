@@ -115,7 +115,9 @@ impl Config {
             config.route = websocket_config.route.unwrap_or(config.route);
             config.ssl = websocket_config.ssl.unwrap_or(config.ssl);
             config.max_msg_size = websocket_config.max_msg_size.unwrap_or(config.max_msg_size);
-            config.message_buffer_capacity = websocket_config.message_buffer_capacity.unwrap_or(config.message_buffer_capacity);
+            config.message_buffer_capacity = websocket_config
+                .message_buffer_capacity
+                .unwrap_or(config.message_buffer_capacity);
             config.extra = websocket_config.extra;
         }
         config

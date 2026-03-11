@@ -4,7 +4,9 @@ use std::sync::Arc;
 use tokio::net::TcpSocket;
 use tokio::sync::broadcast::{self, error::RecvError, error::TryRecvError, Receiver};
 use tokio_tungstenite::accept_async_with_config;
-use tokio_tungstenite::tungstenite::{error::CapacityError, protocol::WebSocketConfig, Error as WsError, Message, Utf8Bytes};
+use tokio_tungstenite::tungstenite::{
+    error::CapacityError, protocol::WebSocketConfig, Error as WsError, Message, Utf8Bytes,
+};
 use tracing::{debug, error, info, trace, warn};
 
 use crate::config::Config;
@@ -64,7 +66,10 @@ impl MessageBus {
         let (mut write, mut read) = ws_stream.split();
         let mut rx = self.message_tx.subscribe();
 
-        debug!("WebSocket connection opened (subscribers: {})", self.message_tx.receiver_count());
+        debug!(
+            "WebSocket connection opened (subscribers: {})",
+            self.message_tx.receiver_count()
+        );
 
         let read_bus = self.clone();
         let mut read_handle = tokio::spawn(async move {
@@ -106,7 +111,10 @@ impl MessageBus {
                 {
                     Ok(BatchState::Continue) => {}
                     Ok(BatchState::SlowConsumer(skipped)) => {
-                        warn!("Slow consumer lagged, dropped {} messages — disconnecting", skipped);
+                        warn!(
+                            "Slow consumer lagged, dropped {} messages — disconnecting",
+                            skipped
+                        );
                         break;
                     }
                     Ok(BatchState::Closed) => {
