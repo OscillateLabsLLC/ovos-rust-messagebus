@@ -142,4 +142,4 @@ Apache-2.0
 
 ## Contact
 
-mike@oscillatelabs.net
+[Open an issue on GitHub](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/issues)
