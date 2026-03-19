@@ -20,11 +20,15 @@ LABEL org.opencontainers.image.source="https://github.com/OscillateLabsLLC/ovos-
 LABEL org.opencontainers.image.vendor="Oscillate Labs, LLC"
 LABEL org.opencontainers.image.license="Apache-2.0"
 # if needed, install additional dependencies here
-RUN apk add --no-cache libgcc
+RUN apk add --no-cache libgcc netcat-openbsd
 # copy the binary into the final image
 COPY --from=0 /app/target/release/ovos_messagebus .
 
 # Be sure to secure this with a firewall or reverse proxy
 ENV OVOS_BUS_HOST=0.0.0.0
+
+HEALTHCHECK --interval=60s --timeout=10s --retries=3 --start-period=60s \
+    CMD nc -z 127.0.0.1 8181 || exit 1
+
 # set the binary as entrypoint
 ENTRYPOINT ["/ovos_messagebus"]
