@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v2.0.0...v2.1.0) (2026-03-19)
+
+
+### Features
+
+* container healthcheck ([21dc451](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/21dc45152f78c35d7eaa934138418811286487e6))
+
 ## [2.0.0](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v1.1.2...v2.0.0) (2026-03-11)
 
 
