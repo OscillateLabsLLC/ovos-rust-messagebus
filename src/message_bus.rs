@@ -49,7 +49,12 @@ impl MessageBus {
             let bus_clone = self.clone();
             tokio::spawn(async move {
                 if let Err(e) = bus_clone.handle_connection(stream).await {
-                    error!("Error handling connection: {}", e);
+                    let msg = e.to_string();
+                    if msg.contains("Handshake not finished") {
+                        debug!("Connection closed before WebSocket handshake (likely a healthcheck probe)");
+                    } else {
+                        error!("Error handling connection: {}", e);
+                    }
                 }
             });
         }
