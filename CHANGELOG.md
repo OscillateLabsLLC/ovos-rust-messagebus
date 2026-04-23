@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v2.1.0...v2.1.1) (2026-04-23)
+
+
+### Bug Fixes
+
+* **deps:** bump bytes and rand to clear Dependabot alerts ([2aafac9](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/2aafac9aa05545e14a7abbcbd48b72a733269bac))
+
 ## [2.1.0](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v2.0.0...v2.1.0) (2026-03-19)
 
 
