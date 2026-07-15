@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.2](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v2.1.1...v2.1.2) (2026-07-15)
+
+
+### Bug Fixes
+
+* emit conformant 'type' key in connected greeting ([9ffd007](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/9ffd00797b8f22abcd4ea0fa50369bc5b48b7938)), closes [#33](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/issues/33)
+
 ## [2.1.1](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v2.1.0...v2.1.1) (2026-04-23)
 
 
