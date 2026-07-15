@@ -77,7 +77,7 @@ impl MessageBus {
         );
 
         // Send the OVOS "connected" greeting expected by all bus clients
-        let greeting = r#"{"msg_type": "connected", "data": {}, "context": {"session": {"session_id": "default"}}}"#;
+        let greeting = r#"{"type": "connected", "data": {}, "context": {"session": {"session_id": "default"}}}"#;
         if let Err(e) = write.send(Message::Text(greeting.into())).await {
             error!("Failed to send greeting: {}", e);
             return Ok(());
