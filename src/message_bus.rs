@@ -163,6 +163,7 @@ impl MessageBus {
     }
 }
 
+#[derive(Debug)]
 enum BatchState {
     Continue,
     SlowConsumer(u64),
@@ -210,4 +211,258 @@ where
 
     write.flush().await?;
     Ok(close_state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use std::pin::Pin;
+    use std::task::{Context as TaskContext, Poll};
+
+    fn test_config(message_buffer_capacity: usize, max_msg_size: u32) -> Config {
+        Config {
+            host: "127.0.0.1".to_string(),
+            port: 8181,
+            route: "/core".to_string(),
+            ssl: false,
+            max_msg_size,
+            message_buffer_capacity,
+            extra: HashMap::new(),
+        }
+    }
+
+    #[derive(Default)]
+    struct VecSink {
+        messages: Vec<Message>,
+        flushes: usize,
+    }
+
+    impl Sink<Message> for VecSink {
+        type Error = std::convert::Infallible;
+
+        fn poll_ready(
+            self: Pin<&mut Self>,
+            _: &mut TaskContext<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn start_send(mut self: Pin<&mut Self>, item: Message) -> Result<(), Self::Error> {
+            self.messages.push(item);
+            Ok(())
+        }
+
+        fn poll_flush(
+            mut self: Pin<&mut Self>,
+            _: &mut TaskContext<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
+            self.flushes += 1;
+            Poll::Ready(Ok(()))
+        }
+
+        fn poll_close(
+            self: Pin<&mut Self>,
+            _: &mut TaskContext<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    struct FailingSink;
+
+    impl Sink<Message> for FailingSink {
+        type Error = &'static str;
+
+        fn poll_ready(
+            self: Pin<&mut Self>,
+            _: &mut TaskContext<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn start_send(self: Pin<&mut Self>, _: Message) -> Result<(), Self::Error> {
+            Err("sink write failed")
+        }
+
+        fn poll_flush(
+            self: Pin<&mut Self>,
+            _: &mut TaskContext<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn poll_close(
+            self: Pin<&mut Self>,
+            _: &mut TaskContext<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    fn sent_texts(sink: &VecSink) -> Vec<String> {
+        sink.messages
+            .iter()
+            .map(|m| match m {
+                Message::Text(t) => t.to_string(),
+                other => panic!("unexpected non-text message: {other:?}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn websocket_config_converts_megabytes() {
+        let bus = MessageBus::new(test_config(1024, 25));
+        let ws_config = bus.websocket_config();
+        assert_eq!(ws_config.max_message_size, Some(25 * 1024 * 1024));
+        assert_eq!(ws_config.max_frame_size, Some(25 * 1024 * 1024));
+    }
+
+    #[test]
+    fn zero_buffer_capacity_does_not_panic() {
+        let bus = MessageBus::new(test_config(0, 25));
+        assert_eq!(bus.message_tx.receiver_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn flushes_single_message() {
+        let (tx, mut rx) = broadcast::channel::<Utf8Bytes>(16);
+        let mut sink = VecSink::default();
+        tx.send("hello".into()).unwrap();
+
+        let state = flush_next_batch(&mut sink, &mut rx, 64, 1024)
+            .await
+            .unwrap();
+
+        assert!(matches!(state, BatchState::Continue));
+        assert_eq!(sent_texts(&sink), vec!["hello"]);
+        assert_eq!(sink.flushes, 1);
+    }
+
+    #[tokio::test]
+    async fn batches_queued_messages_up_to_batch_size() {
+        let (tx, mut rx) = broadcast::channel::<Utf8Bytes>(16);
+        let mut sink = VecSink::default();
+        for i in 0..5 {
+            tx.send(format!("msg-{i}").into()).unwrap();
+        }
+
+        let state = flush_next_batch(&mut sink, &mut rx, 3, 1024 * 1024)
+            .await
+            .unwrap();
+
+        assert!(matches!(state, BatchState::Continue));
+        assert_eq!(sent_texts(&sink), vec!["msg-0", "msg-1", "msg-2"]);
+        assert_eq!(sink.flushes, 1);
+
+        // The remaining messages are picked up by the next batch
+        let state = flush_next_batch(&mut sink, &mut rx, 3, 1024 * 1024)
+            .await
+            .unwrap();
+        assert!(matches!(state, BatchState::Continue));
+        assert_eq!(sink.messages.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn stops_batching_at_byte_limit() {
+        let (tx, mut rx) = broadcast::channel::<Utf8Bytes>(16);
+        let mut sink = VecSink::default();
+        for _ in 0..3 {
+            tx.send("aaaa".into()).unwrap();
+        }
+
+        // First message (4 bytes) is under the 5-byte limit, second pushes past it
+        let state = flush_next_batch(&mut sink, &mut rx, 64, 5).await.unwrap();
+
+        assert!(matches!(state, BatchState::Continue));
+        assert_eq!(sink.messages.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn stops_batching_when_byte_limit_exactly_reached() {
+        let (tx, mut rx) = broadcast::channel::<Utf8Bytes>(16);
+        let mut sink = VecSink::default();
+        tx.send("aaaa".into()).unwrap();
+        tx.send("aaaa".into()).unwrap();
+
+        // First message lands exactly on the 4-byte limit, so batching must stop
+        let state = flush_next_batch(&mut sink, &mut rx, 64, 4).await.unwrap();
+
+        assert!(matches!(state, BatchState::Continue));
+        assert_eq!(sink.messages.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn first_message_always_sent_even_over_byte_limit() {
+        let (tx, mut rx) = broadcast::channel::<Utf8Bytes>(16);
+        let mut sink = VecSink::default();
+        tx.send("a large message".into()).unwrap();
+        tx.send("second".into()).unwrap();
+
+        let state = flush_next_batch(&mut sink, &mut rx, 64, 1).await.unwrap();
+
+        assert!(matches!(state, BatchState::Continue));
+        assert_eq!(sent_texts(&sink), vec!["a large message"]);
+    }
+
+    #[tokio::test]
+    async fn lagged_receiver_reports_slow_consumer() {
+        let (tx, mut rx) = broadcast::channel::<Utf8Bytes>(2);
+        let mut sink = VecSink::default();
+        for i in 0..4 {
+            tx.send(format!("msg-{i}").into()).unwrap();
+        }
+
+        let state = flush_next_batch(&mut sink, &mut rx, 64, 1024)
+            .await
+            .unwrap();
+
+        match state {
+            BatchState::SlowConsumer(skipped) => assert_eq!(skipped, 2),
+            _ => panic!("expected SlowConsumer"),
+        }
+        assert!(sink.messages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn closed_channel_drains_remaining_then_reports_closed() {
+        let (tx, mut rx) = broadcast::channel::<Utf8Bytes>(16);
+        let mut sink = VecSink::default();
+        tx.send("first".into()).unwrap();
+        tx.send("second".into()).unwrap();
+        drop(tx);
+
+        let state = flush_next_batch(&mut sink, &mut rx, 64, 1024)
+            .await
+            .unwrap();
+
+        assert!(matches!(state, BatchState::Closed));
+        assert_eq!(sent_texts(&sink), vec!["first", "second"]);
+        assert_eq!(sink.flushes, 1);
+    }
+
+    #[tokio::test]
+    async fn closed_channel_with_no_messages_reports_closed() {
+        let (tx, mut rx) = broadcast::channel::<Utf8Bytes>(16);
+        let mut sink = VecSink::default();
+        drop(tx);
+
+        let state = flush_next_batch(&mut sink, &mut rx, 64, 1024)
+            .await
+            .unwrap();
+
+        assert!(matches!(state, BatchState::Closed));
+        assert!(sink.messages.is_empty());
+    }
+
+    #[tokio::test]
+    async fn sink_error_is_propagated() {
+        let (tx, mut rx) = broadcast::channel::<Utf8Bytes>(16);
+        let mut sink = FailingSink;
+        tx.send("hello".into()).unwrap();
+
+        let result = flush_next_batch(&mut sink, &mut rx, 64, 1024).await;
+
+        assert_eq!(result.unwrap_err(), "sink write failed");
+    }
 }

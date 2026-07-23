@@ -1,9 +1,4 @@
-mod config;
-mod message_bus;
-mod utils;
-
-use crate::config::Config;
-use crate::message_bus::MessageBus;
+use ovos_messagebus::{Config, MessageBus};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]

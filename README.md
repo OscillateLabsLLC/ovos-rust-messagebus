@@ -127,10 +127,10 @@ You can adjust the port mapping and environment variables as needed.
 To run the test suite:
 
 ```sh
-cargo test
+cargo test --all-features -- --test-threads=1
 ```
 
-...except we don't have very many tests. Please feel free to contribute!
+The suite includes unit tests for config parsing and write batching, plus WebSocket integration tests that exercise a live bus (greeting, broadcast fan-out, message ordering, oversized-message enforcement). The integration tests bind real sockets, so run them with `--test-threads=1` as shown.
 
 ### Contributing
 
