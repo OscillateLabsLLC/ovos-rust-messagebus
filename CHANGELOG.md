@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.3](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v2.1.2...v2.1.3) (2026-07-23)
+
+
+### Bug Fixes
+
+* prevent startup panic when message buffer capacity is 0 ([e511263](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/e51126324c0b0990cb86365dd2023b26368dde70))
+
 ## [2.1.2](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v2.1.1...v2.1.2) (2026-07-15)
 
 
