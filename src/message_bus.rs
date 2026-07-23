@@ -23,7 +23,8 @@ pub struct MessageBus {
 
 impl MessageBus {
     pub fn new(config: Config) -> Self {
-        let (message_tx, _) = broadcast::channel(config.message_buffer_capacity);
+        // broadcast::channel panics on zero capacity; clamp so a bad config can't crash startup
+        let (message_tx, _) = broadcast::channel(config.message_buffer_capacity.max(1));
         Self {
             config: Arc::new(config),
             message_tx,

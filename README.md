@@ -84,7 +84,7 @@ Outbound writes are batched: the write loop collects up to 64 pending messages (
 
 ### Slow consumer policy
 
-The broadcast buffer has a fixed capacity (default 1024 messages, configurable via `OVOS_BUS_MSG_BUFFER_CAPACITY` or `message_buffer_capacity` in the config file). If a subscriber falls behind by more than this many messages, it is disconnected rather than allowed to accumulate unbounded backlog.
+The broadcast buffer has a fixed capacity (default 1024 messages, configurable via `OVOS_BUS_MSG_BUFFER_CAPACITY` or `message_buffer_capacity` in the config file; values below 1 are clamped to 1). If a subscriber falls behind by more than this many messages, it is disconnected rather than allowed to accumulate unbounded backlog.
 
 This is an intentional tradeoff: it caps memory usage and prevents one stalled client from degrading the bus for everyone else, at the cost of dropping that client's connection. For typical OVOS workloads (sequential conversational traffic at 10-50 messages/sec), a client would need to be completely unresponsive for 20-100 seconds before hitting the limit. The default of 1024 is appropriate for most deployments. Increase it if you have a workload with sustained high-throughput bursts where temporary receiver lag is expected and acceptable.
 
