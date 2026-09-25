@@ -76,6 +76,13 @@ jobs:
 
   build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      # Keyless signing: cosign trades this short-lived OIDC token for a
+      # Fulcio certificate, so nothing here holds a key that could leak or
+      # need rotating.
+      id-token: write
 
     steps:
       - name: Checkout code
@@ -99,15 +106,46 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
+        id: push
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: |
+            IMAGE_VERSION=${{ github.event.release.tag_name || github.sha }}
+            VCS_REF=${{ github.sha }}
           tags: |
             ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:latest
             ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:${{ github.sha }}
             ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:${{ github.event.release.tag_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Sign the published image
+        env:
+          IMAGE: ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          # Sign the digest, never a tag: this repository publishes a moving
+          # :latest, and a signature bound to that name would keep verifying
+          # after the tag was moved somewhere else.
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+
+      - name: Verify the signature before calling the image published
+        env:
+          IMAGE: ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          # Verify from the registry, as an admission controller will. A
+          # signing step nobody verifies has not been shown to work.
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/\.github/workflows/release-build\.yml@refs/tags/" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "${IMAGE}@${DIGEST}" > /dev/null
+          echo "signature verified for ${IMAGE}@${DIGEST}"
