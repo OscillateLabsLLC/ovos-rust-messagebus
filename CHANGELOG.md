@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.4](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v2.1.3...v2.1.4) (2026-09-25)
+
+
+### Bug Fixes
+
+* upstream clean-close, SIGTERM, and release hardening from thalovant fork ([#39](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/issues/39)) ([5fb0c54](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/5fb0c547d7d5079068beb36df7a01d12e94abafb))
+
 ## [2.1.3](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v2.1.2...v2.1.3) (2026-07-23)
 
 
