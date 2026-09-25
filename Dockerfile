@@ -19,6 +19,11 @@ LABEL org.opencontainers.image.documentation="https://github.com/OscillateLabsLL
 LABEL org.opencontainers.image.source="https://github.com/OscillateLabsLLC/ovos-rust-messagebus"
 LABEL org.opencontainers.image.vendor="Oscillate Labs, LLC"
 LABEL org.opencontainers.image.license="Apache-2.0"
+# Release CI passes real values; defaults keep a plain `docker build .` working
+ARG IMAGE_VERSION=dev
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.version="${IMAGE_VERSION}"
+LABEL org.opencontainers.image.revision="${VCS_REF}"
 # if needed, install additional dependencies here
 RUN apk add --no-cache libgcc netcat-openbsd
 # copy the binary into the final image

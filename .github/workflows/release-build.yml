@@ -113,6 +113,9 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: |
+            IMAGE_VERSION=${{ github.event.release.tag_name || github.sha }}
+            VCS_REF=${{ github.sha }}
           tags: |
             ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:latest
             ghcr.io/${{ steps.lowercase_repo.outputs.REPO_LOWERCASE }}:${{ github.sha }}
