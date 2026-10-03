@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.5](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v2.1.4...v2.1.5) (2026-10-03)
+
+
+### Bug Fixes
+
+* log a peer reset without a closing handshake at debug, not error ([819debf](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/819debf026e79738c1396c0bea187486468aa0fa))
+
 ## [2.1.4](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v2.1.3...v2.1.4) (2026-09-25)
 
 
