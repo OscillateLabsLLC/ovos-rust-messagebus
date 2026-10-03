@@ -15,12 +15,30 @@ pub struct Config {
     pub max_msg_size: u32,
     #[serde(default = "default_message_buffer")]
     pub message_buffer_capacity: usize,
+    /// Answer a plain `GET /health` on the bus port with `200 OK`, for
+    /// orchestrator probes. On by default; see `OVOS_BUS_HEALTH_ENDPOINT`.
+    #[serde(default = "default_health_endpoint")]
+    pub health_endpoint: bool,
     #[serde(flatten)]
     pub extra: HashMap<String, serde_yaml::Value>,
 }
 
 fn default_message_buffer() -> usize {
     1024
+}
+
+fn default_health_endpoint() -> bool {
+    true
+}
+
+/// Reads a boolean environment value: `0`, `false`, `no` and `off` are false,
+/// `1`, `true`, `yes` and `on` are true (any case); anything else is ignored.
+fn parse_bool(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
 }
 
 #[derive(Deserialize)]
@@ -36,6 +54,7 @@ struct WebSocketConfig {
     ssl: Option<bool>,
     max_msg_size: Option<u32>,
     message_buffer_capacity: Option<usize>,
+    health_endpoint: Option<bool>,
     #[serde(flatten)]
     extra: HashMap<String, serde_yaml::Value>,
 }
@@ -56,6 +75,7 @@ impl Config {
             ssl: false,
             max_msg_size: 25,
             message_buffer_capacity: default_message_buffer(),
+            health_endpoint: default_health_endpoint(),
             extra: HashMap::new(),
         };
 
@@ -88,6 +108,15 @@ impl Config {
         if let Ok(buf_cap) = env::var("OVOS_BUS_MSG_BUFFER_CAPACITY") {
             if let Ok(cap) = buf_cap.parse() {
                 config.message_buffer_capacity = cap;
+            }
+        }
+        if let Ok(value) = env::var("OVOS_BUS_HEALTH_ENDPOINT") {
+            match parse_bool(&value) {
+                Some(enabled) => config.health_endpoint = enabled,
+                None => warn!(
+                    "Ignoring OVOS_BUS_HEALTH_ENDPOINT={:?}: expected true or false",
+                    value
+                ),
             }
         }
         if env::var("OVOS_BUS_USE_SSL").is_ok() {
@@ -124,6 +153,9 @@ impl Config {
             config.message_buffer_capacity = websocket_config
                 .message_buffer_capacity
                 .unwrap_or(config.message_buffer_capacity);
+            config.health_endpoint = websocket_config
+                .health_endpoint
+                .unwrap_or(config.health_endpoint);
             config.extra = websocket_config.extra;
         }
         config
@@ -147,6 +179,7 @@ mod tests {
         env::remove_var("OVOS_BUS_USE_SSL");
         env::remove_var("OVOS_BUS_MAX_MSG_SIZE");
         env::remove_var("OVOS_BUS_MSG_BUFFER_CAPACITY");
+        env::remove_var("OVOS_BUS_HEALTH_ENDPOINT");
     }
 
     fn write_temp_config(name: &str, contents: &str) -> PathBuf {
@@ -167,7 +200,36 @@ mod tests {
         assert_eq!(test_conf.max_msg_size, 25);
         assert_eq!(test_conf.message_buffer_capacity, 1024);
         assert!(!test_conf.ssl);
+        assert!(
+            test_conf.health_endpoint,
+            "the health endpoint is on by default"
+        );
         assert!(test_conf.extra.is_empty());
+    }
+
+    #[serial]
+    #[test]
+    fn test_health_endpoint_env_and_file() {
+        setup_default_config_environment();
+        env::set_var("OVOS_BUS_HEALTH_ENDPOINT", "false");
+        assert!(!Config::new().health_endpoint);
+        env::set_var("OVOS_BUS_HEALTH_ENDPOINT", "OFF");
+        assert!(!Config::new().health_endpoint);
+        env::set_var("OVOS_BUS_HEALTH_ENDPOINT", "1");
+        assert!(Config::new().health_endpoint);
+        // an unreadable value is ignored, not treated as false
+        env::set_var("OVOS_BUS_HEALTH_ENDPOINT", "maybe");
+        assert!(Config::new().health_endpoint);
+
+        // the config file can turn it off, and the environment beats the file
+        env::remove_var("OVOS_BUS_HEALTH_ENDPOINT");
+        let path = write_temp_config("health_endpoint", "websocket:\n  health_endpoint: false\n");
+        env::set_var("OVOS_BUS_CONFIG_FILE", &path);
+        assert!(!Config::new().health_endpoint);
+        env::set_var("OVOS_BUS_HEALTH_ENDPOINT", "true");
+        assert!(Config::new().health_endpoint);
+        setup_default_config_environment();
+        let _ = fs::remove_file(path);
     }
 
     #[serial]
