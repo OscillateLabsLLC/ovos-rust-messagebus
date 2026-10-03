@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v2.1.5...v2.2.0) (2026-10-03)
+
+
+### Features
+
+* serve GET /health on the bus port for orchestrator probes ([#44](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/issues/44)) ([094a964](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/commit/094a9645e1b7ee42f779c982f0ba537f191024e3))
+
 ## [2.1.5](https://github.com/OscillateLabsLLC/ovos-rust-messagebus/compare/v2.1.4...v2.1.5) (2026-10-03)
 
 
