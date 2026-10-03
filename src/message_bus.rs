@@ -177,12 +177,17 @@ impl MessageBus {
     }
 }
 
+/// Ways a connection ends that are the peer's business, not a bus failure: a
+/// close handshake, a socket already closed, a send after the close, or the
+/// peer vanishing without a close frame (a killed process, a pod restarting,
+/// a health probe that hangs up). Logged at debug, not error.
 fn is_clean_close_error(error: &WsError) -> bool {
     matches!(
         error,
         WsError::ConnectionClosed
             | WsError::AlreadyClosed
             | WsError::Protocol(ProtocolError::SendAfterClosing)
+            | WsError::Protocol(ProtocolError::ResetWithoutClosingHandshake)
     )
 }
 
@@ -496,5 +501,17 @@ mod tests {
         assert!(is_clean_close_error(&WsError::Protocol(
             ProtocolError::SendAfterClosing,
         )));
+    }
+
+    #[test]
+    fn a_peer_that_vanishes_without_a_close_frame_is_not_logged_as_an_error() {
+        assert!(is_clean_close_error(&WsError::Protocol(
+            ProtocolError::ResetWithoutClosingHandshake,
+        )));
+        // Real protocol violations still are failures.
+        assert!(!is_clean_close_error(&WsError::Protocol(
+            ProtocolError::ReceivedAfterClosing,
+        )));
+        assert!(!is_clean_close_error(&WsError::Utf8(String::new())));
     }
 }
