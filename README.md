@@ -68,9 +68,23 @@ OVOS_BUS_HOST=10.10.10.10 OVOS_BUS_PORT=8181 /usr/local/bin/ovos_messagebus
 - `OVOS_BUS_ROUTE` (default: `/core`)
 - `OVOS_BUS_USE_SSL` (default: `false`) NOTE: If the environment variable exists SSL will be enabled.
 - `OVOS_BUS_MSG_BUFFER_CAPACITY` (default: `1024`) — the broadcast channel buffer size. See [Architecture](#architecture) for details.
+- `OVOS_BUS_HEALTH_ENDPOINT` (default: `true`) — answer a plain `GET /health` on the bus port with `200 OK`, so an orchestrator can probe the bus with `httpGet` instead of opening a WebSocket. Set to `false` (or `0`, `no`, `off`) to turn it off; `health_endpoint` in the config file does the same. See [Health check](#health-check).
 - `RUST_LOG` (default: unset) — controls log verbosity. Examples: `RUST_LOG=info` for startup and connection events, `RUST_LOG=debug` for connection lifecycle, `RUST_LOG=trace` for per-message logging.
 
 Environment variables take precedence over settings in the configuration file.
+
+### Health check
+
+The bus answers `GET /health` on its WebSocket port with `200 OK` and a body of `ok`, without a WebSocket upgrade. For Kubernetes:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8181
+```
+
+This proves the bus is accepting connections and its runtime is responding. It does not look at the broadcast channel: a probe that failed on a busy bus would restart it under load. The endpoint serves no data, and it is skipped if the bus's own WebSocket route is `/health`. Disable it with `OVOS_BUS_HEALTH_ENDPOINT=false` if the port is exposed somewhere a liveness answer should not be.
 
 ### Additional Configuration
 

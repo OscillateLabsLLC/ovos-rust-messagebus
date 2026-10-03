@@ -12,6 +12,7 @@ use tokio_tungstenite::tungstenite::{
 use tracing::{debug, error, info, trace, warn};
 
 use crate::config::Config;
+use crate::health;
 
 const TCP_BACKLOG: u32 = 1024;
 const WRITE_BATCH_SIZE: usize = 64;
@@ -70,6 +71,11 @@ impl MessageBus {
         stream: tokio::net::TcpStream,
     ) -> Result<(), Box<dyn std::error::Error>> {
         stream.set_nodelay(true)?;
+        if self.serves_health() && health::is_health_request(&stream).await {
+            debug!("Serving health check");
+            health::serve(stream).await?;
+            return Ok(());
+        }
         let ws_stream = accept_async_with_config(stream, Some(self.websocket_config())).await?;
         let (mut write, mut read) = ws_stream.split();
         let mut rx = self.message_tx.subscribe();
@@ -169,6 +175,13 @@ impl MessageBus {
         Ok(())
     }
 
+    /// Whether `GET /health` is answered on the bus port. A bus whose
+    /// WebSocket route is itself `/health` keeps that route: the WebSocket
+    /// client wins, and the probe is not served.
+    fn serves_health(&self) -> bool {
+        self.config.health_endpoint && self.config.route.trim_end_matches('/') != "/health"
+    }
+
     fn websocket_config(&self) -> WebSocketConfig {
         let max_message_size = self.config.max_msg_size as usize * 1024 * 1024;
         WebSocketConfig::default()
@@ -256,6 +269,7 @@ mod tests {
             ssl: false,
             max_msg_size,
             message_buffer_capacity,
+            health_endpoint: true,
             extra: HashMap::new(),
         }
     }

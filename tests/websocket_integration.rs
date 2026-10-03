@@ -18,6 +18,7 @@ fn test_config(port: u16, max_msg_size: u32) -> Config {
         ssl: false,
         max_msg_size,
         message_buffer_capacity: 1024,
+        health_endpoint: true,
         extra: HashMap::new(),
     }
 }
@@ -192,4 +193,102 @@ async fn handles_many_concurrent_clients() {
     for receiver in &mut receivers {
         assert_eq!(next_text(receiver).await, payload);
     }
+}
+
+/// Connect, retrying while the spawned bus is still binding its port.
+async fn connect_raw(port: u16) -> TcpStream {
+    for _ in 0..50 {
+        if let Ok(stream) = TcpStream::connect(("127.0.0.1", port)).await {
+            return stream;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("the bus never started listening on port {port}");
+}
+
+/// Send a raw HTTP request and return everything the server answers before it
+/// closes the connection.
+async fn raw_request(port: u16, request: &str) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = connect_raw(port).await;
+    stream.write_all(request.as_bytes()).await.expect("write");
+    let mut body = Vec::new();
+    timeout(RECV_TIMEOUT, stream.read_to_end(&mut body))
+        .await
+        .expect("the server closed the connection")
+        .expect("read");
+    String::from_utf8_lossy(&body).into_owned()
+}
+
+async fn start_bus_with(config: impl FnOnce(&mut Config)) -> u16 {
+    let port = free_port();
+    let mut cfg = test_config(port, 25);
+    config(&mut cfg);
+    let bus = MessageBus::new(cfg);
+    tokio::spawn(async move {
+        let _ = bus.run().await;
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    port
+}
+
+#[tokio::test]
+async fn health_answers_200_without_a_websocket_upgrade() {
+    let port = start_bus(25).await;
+    let response = raw_request(port, "GET /health HTTP/1.1\r\nHost: bus\r\n\r\n").await;
+    assert!(response.starts_with("HTTP/1.1 200 OK\r\n"), "{response}");
+    assert!(response.ends_with("\r\n\r\nok\n"), "{response}");
+}
+
+#[tokio::test]
+async fn health_works_for_a_probe_that_sends_its_request_in_pieces() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let port = start_bus(25).await;
+    let mut stream = connect_raw(port).await;
+    for piece in ["GE", "T /hea", "lth HTTP/1.1\r\n", "Host: bus\r\n\r\n"] {
+        stream.write_all(piece.as_bytes()).await.expect("write");
+        tokio::time::sleep(Duration::from_millis(30)).await;
+    }
+    let mut body = Vec::new();
+    timeout(RECV_TIMEOUT, stream.read_to_end(&mut body))
+        .await
+        .expect("closed")
+        .expect("read");
+    assert!(String::from_utf8_lossy(&body).starts_with("HTTP/1.1 200 OK"));
+}
+
+#[tokio::test]
+async fn websocket_clients_still_connect_on_the_same_port() {
+    let port = start_bus(25).await;
+    let health = raw_request(port, "GET /health HTTP/1.1\r\nHost: bus\r\n\r\n").await;
+    assert!(health.starts_with("HTTP/1.1 200"));
+    // a health probe on the port does not disturb the bus afterwards
+    let mut ws = connect_and_greet(port).await;
+    ws.send(Message::Text(
+        r#"{"type":"ping","data":{},"context":{}}"#.into(),
+    ))
+    .await
+    .expect("send");
+    assert!(next_text(&mut ws).await.contains("ping"));
+}
+
+#[tokio::test]
+async fn other_http_paths_are_not_answered_as_health() {
+    let port = start_bus(25).await;
+    let response = raw_request(port, "GET /healthz HTTP/1.1\r\nHost: bus\r\n\r\n").await;
+    assert!(!response.starts_with("HTTP/1.1 200"), "{response}");
+}
+
+#[tokio::test]
+async fn health_can_be_turned_off() {
+    let port = start_bus_with(|cfg| cfg.health_endpoint = false).await;
+    let response = raw_request(port, "GET /health HTTP/1.1\r\nHost: bus\r\n\r\n").await;
+    assert!(!response.starts_with("HTTP/1.1 200"), "{response}");
+}
+
+#[tokio::test]
+async fn a_websocket_route_named_health_keeps_the_route() {
+    let port = start_bus_with(|cfg| cfg.route = "/health".to_string()).await;
+    let response = raw_request(port, "GET /health HTTP/1.1\r\nHost: bus\r\n\r\n").await;
+    assert!(!response.starts_with("HTTP/1.1 200"), "{response}");
 }
